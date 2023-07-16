@@ -214,7 +214,7 @@ for _, part in ipairs(multiblock) do
         align(shape)
     end
     local path = outputFolder ..
-        originalFileName .. "_" .. part.positionX .. "_" .. part.positionY .. "_" .. part.positionZ .. ".3dj"
+        originalFileName .. "_layer" .. part.positionY .. "_" .. part.positionX .. "_" .. part.positionZ .. ".3dj"
     local handle, errormsg = fs.open(path, "w")
     if handle == nil then
         printError("can't write " .. path .. " : " .. errormsg)
