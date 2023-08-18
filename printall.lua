@@ -6,6 +6,7 @@ end
 
 local dir = args[1]
 if not dir:find("^/") then dir = shell.dir() .. "/" .. dir end
+if not dir:find("^/") then dir = "/" .. dir end
 if not dir:find("/$") then dir = dir .. "/" end
 
 local files = fs.list(dir)

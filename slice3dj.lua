@@ -1,4 +1,5 @@
 local args = { ... }
+local appendTitle = false
 
 if #args < 1 then
     printError("Usage: slice3dj <file> [outputFolder]")
@@ -182,6 +183,7 @@ local function slice(source, name)
                 builder.positionX = slice.mbX
                 builder.positionY = slice.mbY
                 builder.positionZ = slice.mbZ
+                if appendTitle then builder.label = info.label .. " | MB: " .. slice.mbX .. ", " .. slice.mbY .. ", " .. slice.mbZ end
                 builder.tooltip = "§3multiblock: " .. slice.mbX .. ", " .. slice.mbY .. ", " .. slice.mbZ
                 builder.shapesOff = {}
                 builder.shapesOn = {}
@@ -205,22 +207,77 @@ term.clearLine()
 local _, startY = term.getCursorPos()
 term.setCursorPos(1, startY)
 
+local okay = true
+local messages = {}
+local shapeNoVolume = 0
+local shapeNonIntegerBounds = 0
+local maxLayer = 0
+for _, part in ipairs(multiblock) do
+    maxLayer = math.max(maxLayer, part.positionY)
+end
+local width = #tostring(maxLayer)
+
+---Validate a shape and add errors.
+---@param shape MBShape
+local function validateShape(shape)
+    local w, h, d = 0, 0, 0
+    w = math.abs(shape.bounds[4] - shape.bounds[1])
+    h = math.abs(shape.bounds[5] - shape.bounds[2])
+    d = math.abs(shape.bounds[6] - shape.bounds[3])
+    if w == 0 or h == 0 or d == 0 then
+        okay = false
+        shapeNoVolume = shapeNoVolume + 1
+    end
+    for _, bound in ipairs(shape.bounds) do
+        if bound % 1 ~= 0 then
+            okay = false
+            shapeNonIntegerBounds = shapeNonIntegerBounds + 1
+            break
+        end
+    end
+end
+
 print("generating output files")
 for _, part in ipairs(multiblock) do
     for _, shape in ipairs(part.shapesOff) do
         align(shape)
+        validateShape(shape)
     end
     for _, shape in ipairs(part.shapesOn) do
         align(shape)
+        validateShape(shape)
     end
-    local path = outputFolder ..
-        originalFileName .. "_layer" .. part.positionY .. "_" .. part.positionX .. "_" .. part.positionZ .. ".3dj"
-    local handle, errormsg = fs.open(path, "w")
-    if handle == nil then
-        printError("can't write " .. path .. " : " .. errormsg)
-    else
-        handle.write(textutils.serializeJSON(part))
-        handle.close()
+    if #part.shapesOff > 127 or #part.shapesOn > 127 then
+        local noShapes = math.max(#part.shapesOff, #part.shapesOn)
+        okay = false
+        table.insert(messages, "Too many shapes ("..noShapes..") in " .. part.positionX .. ", " .. part.positionY .. ", " .. part.positionZ .. "\n  Remove " .. (noShapes - 127) .. " shapes to print")
+    end
+
+    if #part.shapesOff + #part.shapesOn > 0 then
+        local formattedLayer = string.format("%0" .. width .. "d", part.positionY)
+        local path = outputFolder ..
+            originalFileName .. "_layer" .. formattedLayer .. "_" .. part.positionX .. "_" .. part.positionZ .. ".3dj"
+        local handle, errormsg = fs.open(path, "w")
+        if handle == nil then
+            printError("can't write " .. path .. " : " .. errormsg)
+        else
+            handle.write(textutils.serializeJSON(part))
+            handle.close()
+        end
     end
 end
-print("done: output " .. #multiblock .. " parts :)")
+if okay then
+    print("Done: " .. #multiblock .. " parts. Happy printing!")
+else
+    print("Done (with errors): " .. #multiblock .. " parts")
+    printError("[!] Some files might be invalid:")
+    for _, message in ipairs(messages) do
+        printError(message)
+    end
+    if shapeNoVolume > 0 then
+        printError("Shape has no volume (x".. shapeNoVolume ..")")
+    end
+    if shapeNonIntegerBounds > 0 then
+        printError("Shape has non-integer bounds (x".. shapeNonIntegerBounds ..")")
+    end
+end
